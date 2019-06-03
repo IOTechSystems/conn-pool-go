@@ -14,7 +14,10 @@ var (
 	MaximumCap = 30
 	network    = "tcp"
 	address    = "127.0.0.1:7777"
-	factory    = func() (net.Conn, error) { return net.Dial(network, address) }
+	factory    = func() (interface{}, error) { return net.Dial(network, address) }
+	closeConn  = func(conn interface{}) error {
+		return conn.(net.Conn).Close()
+	}
 )
 
 func init() {
@@ -35,14 +38,9 @@ func TestPool_Get_Impl(t *testing.T) {
 	p, _ := newChannelPool()
 	defer p.Close()
 
-	conn, err := p.Get()
+	_, err := p.Get()
 	if err != nil {
 		t.Errorf("Get error: %s", err)
-	}
-
-	_, ok := conn.(*PoolConn)
-	if !ok {
-		t.Errorf("Conn is not of type poolConn")
 	}
 }
 
@@ -87,14 +85,14 @@ func TestPool_Get(t *testing.T) {
 }
 
 func TestPool_Put(t *testing.T) {
-	p, err := NewChannelPool(0, 30, factory)
+	p, err := NewChannelPool(0, 30, factory, closeConn)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer p.Close()
 
 	// get/create from the pool
-	conns := make([]net.Conn, MaximumCap)
+	conns := make([]*PoolConn, MaximumCap)
 	for i := 0; i < MaximumCap; i++ {
 		conn, _ := p.Get()
 		conns[i] = conn
@@ -135,14 +133,10 @@ func TestPool_PutUnusableConn(t *testing.T) {
 	}
 
 	conn, _ = p.Get()
-	if pc, ok := conn.(*PoolConn); !ok {
-		t.Errorf("impossible")
-	} else {
-		pc.MarkUnusable()
-	}
+	conn.MarkUnusable()
 	conn.Close()
 	if p.Len() != poolSize-1 {
-		t.Errorf("Pool size is expected to be initial_size - 1", p.Len(), poolSize-1)
+		t.Errorf("Pool size(%d) is expected to be initial_size - 1 (%d)", p.Len(), poolSize-1)
 	}
 }
 
@@ -184,7 +178,7 @@ func TestPool_Close(t *testing.T) {
 
 func TestPoolConcurrent(t *testing.T) {
 	p, _ := newChannelPool()
-	pipe := make(chan net.Conn, 0)
+	pipe := make(chan *PoolConn, 0)
 
 	go func() {
 		p.Close()
@@ -208,19 +202,19 @@ func TestPoolConcurrent(t *testing.T) {
 }
 
 func TestPoolWriteRead(t *testing.T) {
-	p, _ := NewChannelPool(0, 30, factory)
+	p, _ := NewChannelPool(0, 30, factory, closeConn)
 
 	conn, _ := p.Get()
 
 	msg := "hello"
-	_, err := conn.Write([]byte(msg))
+	_, err := conn.Conn.(net.Conn).Write([]byte(msg))
 	if err != nil {
 		t.Error(err)
 	}
 }
 
 func TestPoolConcurrent2(t *testing.T) {
-	p, _ := NewChannelPool(0, 30, factory)
+	p, _ := NewChannelPool(0, 30, factory, closeConn)
 
 	var wg sync.WaitGroup
 
@@ -250,7 +244,7 @@ func TestPoolConcurrent2(t *testing.T) {
 }
 
 func TestPoolConcurrent3(t *testing.T) {
-	p, _ := NewChannelPool(0, 1, factory)
+	p, _ := NewChannelPool(0, 1, factory, closeConn)
 
 	var wg sync.WaitGroup
 
@@ -268,7 +262,7 @@ func TestPoolConcurrent3(t *testing.T) {
 }
 
 func newChannelPool() (Pool, error) {
-	return NewChannelPool(InitialCap, MaximumCap, factory)
+	return NewChannelPool(InitialCap, MaximumCap, factory, closeConn)
 }
 
 func simpleTCPServer() {
