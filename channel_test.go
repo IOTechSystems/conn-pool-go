@@ -100,7 +100,7 @@ func TestPool_Put(t *testing.T) {
 
 	// now put them all back
 	for _, conn := range conns {
-		conn.Close()
+		conn.Release()
 	}
 
 	if p.Len() != MaximumCap {
@@ -111,7 +111,7 @@ func TestPool_Put(t *testing.T) {
 	conn, _ := p.Get()
 	p.Close() // close pool
 
-	conn.Close() // try to put into a full pool
+	conn.Release() // try to put into a full pool
 	if p.Len() != 0 {
 		t.Errorf("Put error. Closed pool shouldn't allow to put connections.")
 	}
@@ -123,18 +123,18 @@ func TestPool_PutUnusableConn(t *testing.T) {
 
 	// ensure pool is not empty
 	conn, _ := p.Get()
-	conn.Close()
+	conn.Release()
 
 	poolSize := p.Len()
 	conn, _ = p.Get()
-	conn.Close()
+	conn.Release()
 	if p.Len() != poolSize {
 		t.Errorf("Pool size is expected to be equal to initial size")
 	}
 
 	conn, _ = p.Get()
 	conn.MarkUnusable()
-	conn.Close()
+	conn.Release()
 	if p.Len() != poolSize-1 {
 		t.Errorf("Pool size(%d) is expected to be initial_size - 1 (%d)", p.Len(), poolSize-1)
 	}
@@ -196,7 +196,7 @@ func TestPoolConcurrent(t *testing.T) {
 			if conn == nil {
 				return
 			}
-			conn.Close()
+			conn.Release()
 		}()
 	}
 }
@@ -224,7 +224,7 @@ func TestPoolConcurrent2(t *testing.T) {
 			go func(i int) {
 				conn, _ := p.Get()
 				time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
-				conn.Close()
+				conn.Release()
 				wg.Done()
 			}(i)
 		}
@@ -235,7 +235,7 @@ func TestPoolConcurrent2(t *testing.T) {
 		go func(i int) {
 			conn, _ := p.Get()
 			time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
-			conn.Close()
+			conn.Release()
 			wg.Done()
 		}(i)
 	}
@@ -255,7 +255,7 @@ func TestPoolConcurrent3(t *testing.T) {
 	}()
 
 	if conn, err := p.Get(); err == nil {
-		conn.Close()
+		conn.Release()
 	}
 
 	wg.Wait()

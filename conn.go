@@ -14,7 +14,7 @@ type PoolConn struct {
 }
 
 // Close() puts the given connects back to the pool instead of closing it.
-func (p *PoolConn) Close() error {
+func (p *PoolConn) Release() error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
